@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passport Web</title>
+<style>
+:root {
+  --ink: #1c2a2e; --paper: #f2ede1; --paper-line: #d8cfb8;
+  --teal: #1f4a4c; --teal-deep: #16363a; --stamp: #a63a2e; --gold: #b7913a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: Georgia, 'Source Serif 4', serif; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 1.6rem 1rem 4rem; }
+header { border-bottom: 3px solid var(--teal-deep); padding-bottom: 0.9rem; margin-bottom: 1.1rem; }
+.kicker { font-family: monospace; font-size: 0.7rem; color: var(--stamp); margin: 0 0 0.25rem; }
+h1 { font-size: 1.5rem; margin: 0; color: var(--teal-deep); }
+select#topicSelect {
+  width: 100%; font-family: monospace; font-size: 0.95rem; padding: 0.6rem;
+  margin-bottom: 1rem; border: 1px solid var(--paper-line); border-radius: 4px; background: white;
+}
+.hero { width: 100%; border-radius: 4px; margin-bottom: 0.8rem; display: none; }
+.hero.show { display: block; }
+.heroThumbs { display: flex; gap: 0.3rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.heroThumbs img { width: 56px; height: 42px; object-fit: cover; border-radius: 3px; cursor: pointer; border: 2px solid transparent; opacity: 0.7; }
+.heroThumbs img.active { border-color: var(--stamp); opacity: 1; }
+.tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.tabs button { font-family: monospace; font-size: 0.76rem; padding: 0.45rem 0.75rem; border: 1px solid var(--paper-line); background: transparent; color: var(--ink); border-radius: 3px; cursor: pointer; }
+.tabs button.active { background: var(--gold); border-color: var(--gold); color: var(--teal-deep); }
+.tabs button[disabled] { opacity: 0.3; cursor: not-allowed; }
+nav.langs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.1rem; }
+nav.langs button { font-family: monospace; font-size: 0.72rem; padding: 0.38rem 0.65rem; border: 1px solid var(--paper-line); background: transparent; color: var(--ink); border-radius: 3px; cursor: pointer; }
+nav.langs button.active { background: var(--teal); border-color: var(--teal); color: var(--paper); }
+.ticket { border: 1px solid var(--paper-line); border-left: 4px solid var(--teal-deep); padding: 0.75rem 0.85rem; margin-bottom: 0.55rem; border-radius: 2px; display: flex; align-items: baseline; gap: 0.75rem; background: rgba(0,0,0,0.015); }
+.ticket .no { font-family: monospace; font-size: 0.66rem; color: var(--gold); min-width: 2.1em; }
+.ticket .content { flex: 1; min-width: 0; }
+.ticket p { margin: 0; font-size: 1rem; line-height: 1.4; }
+.ticket p.missing { font-style: italic; opacity: 0.5; font-size: 0.9rem; }
+.playbtn { border: 1px solid var(--teal); background: transparent; color: var(--teal); width: 2rem; height: 2rem; border-radius: 50%; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.playbtn[disabled] { opacity: 0.3; cursor: not-allowed; }
+.playbtn.playing { background: var(--teal-deep); color: var(--paper); }
+.empty { opacity: 0.6; font-style: italic; padding: 1rem 0; }
+.reading { border: 1px solid var(--paper-line); border-radius: 4px; padding: 1rem 1.1rem; margin-bottom: 0.8rem; background: rgba(0,0,0,0.015); white-space: pre-wrap; font-size: 0.95rem; line-height: 1.5; }
+.reading .title { font-family: monospace; font-weight: bold; color: var(--teal-deep); display:block; margin-bottom: 0.5rem; }
+footer { margin-top: 2rem; font-family: monospace; font-size: 0.63rem; opacity: 0.5; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">PASSPORT · 1999 → WEB</p>
+    <h1 id="topicTitle">Vocabulario turístico interactivo</h1>
+  </header>
+
+  <select id="topicSelect"></select>
+  <img class="hero" id="heroImg">
+  <div class="heroThumbs" id="heroThumbs"></div>
+  <div class="tabs" id="sceneTabs"></div>
+  <nav class="langs" id="langNav"></nav>
+  <div id="lines"></div>
+
+  <footer>Passport Web · reconstrucción del CD-ROM original de 1999</footer>
+</div>
+
+<script src="data.json.js"></script>
+<script>
+const LANG_LABELS = {S:'Español', E:'English', F:'Français', G:'Deutsch', I:'Italiano'};
+const LANG_ORDER = ['S','E','F','G','I'];
+const SCENE_LABELS = {dialogo:'Diálogo', palabras:'Palabras', frases:'Frases', charts:'Tablas', gramatica:'Gramática'};
+const SCENE_ORDER = ['dialogo','palabras','frases','charts','gramatica'];
+
+let currentTopic = DATA.order[0];
+let currentScene = null;
+let currentLang = 'S';
+let currentAudio = null, currentBtn = null;
+
+function stopAudio() {
+  if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
+  if (currentBtn) currentBtn.classList.remove('playing');
+  currentAudio = null; currentBtn = null;
+}
+
+function buildTopicSelect() {
+  const sel = document.getElementById('topicSelect');
+  sel.innerHTML = '';
+  DATA.order.forEach(num => {
+    const opt = document.createElement('option');
+    opt.value = num;
+    opt.textContent = `${num} — ${DATA.topics[num].name}`;
+    sel.appendChild(opt);
+  });
+  sel.value = currentTopic;
+  sel.addEventListener('change', () => { currentTopic = sel.value; onTopicChange(); });
+}
+
+function firstAvailableScene(topicObj) {
+  return SCENE_ORDER.find(s => topicObj[s] && topicObj[s].length);
+}
+
+function buildHero() {
+  const topicObj = DATA.topics[currentTopic];
+  const heroImg = document.getElementById('heroImg');
+  const thumbs = document.getElementById('heroThumbs');
+  thumbs.innerHTML = '';
+  if (!topicObj.images || !topicObj.images.length) {
+    heroImg.classList.remove('show');
+    return;
+  }
+  heroImg.src = topicObj.images[0];
+  heroImg.classList.add('show');
+  topicObj.images.forEach((src, i) => {
+    const t = document.createElement('img');
+    t.src = src;
+    if (i === 0) t.classList.add('active');
+    t.addEventListener('click', () => {
+      heroImg.src = src;
+      [...thumbs.children].forEach(c => c.classList.remove('active'));
+      t.classList.add('active');
+    });
+    thumbs.appendChild(t);
+  });
+}
+
+function buildSceneTabs() {
+  const topicObj = DATA.topics[currentTopic];
+  const tabs = document.getElementById('sceneTabs');
+  tabs.innerHTML = '';
+  SCENE_ORDER.forEach(s => {
+    const has = topicObj[s] && topicObj[s].length;
+    const b = document.createElement('button');
+    b.textContent = SCENE_LABELS[s] + (has ? ` (${topicObj[s].length})` : '');
+    b.disabled = !has;
+    b.className = s === currentScene ? 'active' : '';
+    b.addEventListener('click', () => { currentScene = s; render(); buildSceneTabs(); });
+    tabs.appendChild(b);
+  });
+}
+
+function buildLangNav() {
+  const nav = document.getElementById('langNav');
+  nav.innerHTML = '';
+  LANG_ORDER.forEach(code => {
+    const b = document.createElement('button');
+    b.textContent = LANG_LABELS[code];
+    b.className = code === currentLang ? 'active' : '';
+    b.addEventListener('click', () => { currentLang = code; stopAudio(); render(); buildLangNav(); });
+    nav.appendChild(b);
+  });
+}
+
+function onTopicChange() {
+  stopAudio();
+  const topicObj = DATA.topics[currentTopic];
+  currentScene = firstAvailableScene(topicObj);
+  document.getElementById('topicTitle').textContent = `Tema ${currentTopic} — ${topicObj.name}`;
+  document.getElementById('topicSelect').value = currentTopic;
+  buildHero();
+  buildSceneTabs();
+  render();
+}
+
+function renderReadingList(list) {
+  const container = document.getElementById('lines');
+  container.innerHTML = '';
+  const filtered = list.filter(r => !r.lang || r.lang === currentLang);
+  if (!filtered.length) {
+    container.innerHTML = '<p class="empty">No hay lecturas en este idioma para este tema.</p>';
+    return;
+  }
+  filtered.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'reading';
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = r.title;
+    div.appendChild(title);
+    const body = document.createElement('div');
+    body.textContent = r.text.split('\r').slice(1).join('\n').trim();
+    div.appendChild(body);
+    container.appendChild(div);
+  });
+}
+
+function renderLineList(list) {
+  const container = document.getElementById('lines');
+  container.innerHTML = '';
+  if (!list || !list.length) {
+    container.innerHTML = '<p class="empty">Sin contenido para esta selección.</p>';
+    return;
+  }
+  list.forEach((line, i) => {
+    const entry = line[currentLang];
+    const div = document.createElement('div');
+    div.className = 'ticket';
+    const no = document.createElement('div');
+    no.className = 'no';
+    no.textContent = String(i + 1).padStart(2, '0');
+    div.appendChild(no);
+    const content = document.createElement('div');
+    content.className = 'content';
+    const p = document.createElement('p');
+    if (entry && entry.text) { p.textContent = entry.text; }
+    else { p.textContent = 'Sin texto para este idioma.'; p.classList.add('missing'); }
+    content.appendChild(p);
+    div.appendChild(content);
+    const btn = document.createElement('button');
+    btn.className = 'playbtn';
+    btn.textContent = '▶';
+    if (!entry || !entry.audio) {
+      btn.disabled = true; btn.textContent = '—';
+    } else {
+      btn.addEventListener('click', () => {
+        if (currentBtn === btn) { stopAudio(); return; }
+        stopAudio();
+        const audio = new Audio(entry.audio);
+        audio.addEventListener('ended', stopAudio);
+        audio.play().catch(() => {});
+        currentAudio = audio; currentBtn = btn;
+        btn.classList.add('playing'); btn.textContent = '■';
+      });
+    }
+    div.appendChild(btn);
+    container.appendChild(div);
+  });
+}
+
+function render() {
+  const topicObj = DATA.topics[currentTopic];
+  const list = currentScene ? topicObj[currentScene] : [];
+  if (currentScene === 'gramatica') {
+    renderReadingList(list);
+  } else {
+    renderLineList(list);
+  }
+}
+
+buildTopicSelect();
+buildLangNav();
+onTopicChange();
+</script>
+</body>
+</html>
