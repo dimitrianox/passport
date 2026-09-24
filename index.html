@@ -48,8 +48,10 @@ nav.langs button.active { background: var(--teal); border-color: var(--teal); co
 .reading table { border-collapse: collapse; font-size: 0.88rem; }
 .reading table td { padding: 0.2rem 0.9rem 0.2rem 0; vertical-align: top; white-space: nowrap; }
 .reading table tr:first-child td { font-weight: bold; color: var(--teal-deep); border-bottom: 1px solid var(--paper-line); }
-.reading .subhead { font-weight: bold; color: var(--teal-deep); margin: 0.9rem 0 0.3rem; display: block; }
+.reading .subhead { font-weight: normal; text-decoration: underline; color: var(--ink); margin: 0.9rem 0 0.3rem; display: block; }
 .reading .example { font-style: italic; margin: 0 0 0.2rem 1rem; display: block; }
+.reading b { color: var(--teal-deep); }
+.reading u { text-decoration-color: var(--stamp); }
 /* Dialogo tipo conversacion */
 .turn { display: flex; margin-bottom: 0.7rem; }
 .turn.L { justify-content: flex-start; }
@@ -318,6 +320,19 @@ function renderAlfabeto(alf) {
   });
 }
 
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatInline(text) {
+  let s = escapeHtml(text);
+  // negrita en "palabra (traduccion)" -> resalta el termino que se esta enseñando
+  s = s.replace(/([A-Za-zÀ-ÿ''-]+)(\s*\([^)]{1,40}\))/g, '<b>$1</b>$2');
+  // subrayado en terminaciones/sufijos gramaticales tipo -s, -es, -ir, -fe
+  s = s.replace(/(-[A-Za-zÀ-ÿ]{1,4})\b/g, '<u>$1</u>');
+  return s;
+}
+
 function splitBlocks(text) {
   return text.split(/\n\s*\n/).map(b => b.replace(/^\n+|\n+$/g, '')).filter(b => b.trim());
 }
@@ -332,7 +347,6 @@ function renderReadingBody(container, text) {
 
     const columnish = rawLines.filter(l => /\s{2,}/.test(l.trim())).length;
     if (rawLines.length >= 2 && columnish >= Math.ceil(rawLines.length * 0.6)) {
-      // Tabla: columnas separadas por 2+ espacios
       const wrap = document.createElement('div');
       wrap.className = 'tablewrap';
       const table = document.createElement('table');
@@ -341,7 +355,7 @@ function renderReadingBody(container, text) {
         const tr = document.createElement('tr');
         cells.forEach(c => {
           const td = document.createElement('td');
-          td.textContent = c;
+          td.innerHTML = formatInline(c);
           tr.appendChild(td);
         });
         table.appendChild(tr);
@@ -364,7 +378,7 @@ function renderReadingBody(container, text) {
       rawLines.forEach(l => {
         const ex = document.createElement('span');
         ex.className = 'example';
-        ex.textContent = l.trim();
+        ex.innerHTML = formatInline(l.trim());
         body.appendChild(ex);
       });
       return;
@@ -372,7 +386,7 @@ function renderReadingBody(container, text) {
 
     const p = document.createElement('p');
     p.className = 'para';
-    p.textContent = rawLines.join(' ');
+    p.innerHTML = formatInline(rawLines.join(' '));
     body.appendChild(p);
   });
   container.appendChild(body);
